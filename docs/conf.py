@@ -113,7 +113,7 @@ epub_exclude_files = ['search.html']
 # -- Custom Document processing ----------------------------------------------
 
 import gensidebar
-gensidebar.generate_sidebar(globals(), 'helm_chart')
+gensidebar.generate_sidebar(globals(), 'mlbench_helm')
 
 import sphinx.addnodes
 import docutils.nodes
