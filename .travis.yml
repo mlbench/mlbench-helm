@@ -39,7 +39,7 @@ script:
   --set worker.image.repository=mlbench/mlbench-worker \
   --set worker.image.tag=latest \
   --set limits.cpu=1000m \
-  --set limits.worker=1 \
+  --set limits.workers=1 \
   --set worker.replicaCount=1 \
   --set limits.bandwidth=100 \
   --set limits.gpu=0 \
