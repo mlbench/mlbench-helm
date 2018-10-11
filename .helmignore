@@ -1,0 +1,4 @@
+docs/
+README.rst
+__pycache__
+myvalues.yaml

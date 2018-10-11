@@ -48,3 +48,4 @@ parsetab.py
 # deploy files
 .deploy_cfg
 .DS_Store
+myvalues.yaml
