@@ -25,6 +25,7 @@ spec:
         component: "{{ .Values.worker.name }}"
         release: {{ .Release.Name }}
         role: worker
+        date: "{{ .Release.Time.Seconds }}"
     spec:
       serviceAccountName: {{ template "mlbench.worker.fullname" . }}-sa
       affinity:
