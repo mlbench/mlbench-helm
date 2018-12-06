@@ -45,6 +45,9 @@ parsetab.py
 /hal-roborio/hal_impl/libwpiutil.so
 /wpilib/tests/__hal__
 
+# VS Code
+.vscode
+
 # deploy files
 .deploy_cfg
 .DS_Store
