@@ -112,9 +112,6 @@ Hardware Limits
 | ``limits.cpu``              | | The maximum number of cpu cores that can |                          |
 |                             | | be comissioned per worker                |                          |
 +-----------------------------+--------------------------------------------+--------------------------+
-| ``limits.bandwidth``        | | The maximum bandwidth that can be used   |                          |
-|                             | | for communications between workers       |                          |
-+-----------------------------+--------------------------------------------+--------------------------+
 | ``limits.gpu``              | | The maximum number of GPUs that can      |                          |
 |                             | | be comissioned per worker                |                          |
 +-----------------------------+--------------------------------------------+--------------------------+

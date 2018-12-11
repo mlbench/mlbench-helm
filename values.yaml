@@ -71,7 +71,6 @@ worker:
 limits:
   workers: 128
   cpu:
-  bandwidth:
   gpu:
 
 gcePersistentDisk:
