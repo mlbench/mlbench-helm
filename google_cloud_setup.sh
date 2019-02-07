@@ -1,14 +1,32 @@
 #!/bin/bash +x
-usage="usage: google_cloud_setup.sh <command>
+usage="usage: google_cloud_setup.sh <command> [NUM_NODES=<num_nodes>]
+                [PREFIX=<prefix>] [MACHINE_ZONE=<machine_zone>]
+                [MYVALUES_FILE=<myvalues_file>] [MACHINE_TYPE=<machine_type>]
+                [CLUSTER_VERSION=<cluster_version>] [DISK_TYPE=<disk_type>]
+                [INSTANCE_DISK_SIZE=<disk_size>]
 
-command:
+commands:
     get-credential  Get google credentials
     create-cluster  Create a new cluster
     install-chart   Install the Helm chart
     upgrade-chart   Upgrade (Redeploy) the Helm chart
     uninstall-chart Delete the Helm release/chart
     delete-cluster  Delete cluster and perform a cleanup
-    help            Show this help"
+    help            Show this help
+
+parameters:
+    num_nodes       Number of nodes to create in the cluster, default: 2
+    prefix          Prefix to add to Cluster and Pod names, default: 'rel'
+    myvalues_file   Path to custom helm chart values file, default: 'myvalues.yaml'
+
+    machine_zone    Google Cloud zone, default: 'europe-west1-b'
+    machine_type    Google Cloud instance type, default: 'n1-standard-4'
+    cluster_version Kubernetes version, default: 1.10
+    disk_type       Cloud storage type, default: 'pd-standard'
+    disk_size       Google cloud storage size (GB), default: 50
+
+    "
+
 
 NUM_NODES=${NUM_NODES:-2}
 PREFIX=${PREFIX:-rel}
@@ -23,9 +41,8 @@ CLUSTER_VERSION=1.10
 INSTANCE_DISK_SIZE=50
 DISK_TYPE=pd-standard
 DISK_SIZE=10GB
-GCE_PERSISTENT_DISK=gce-nfs-disk
 
-MACHINE_TYPE=`uname -m`
+MACHINE_ARCHITECTURE=`uname -m`
 
 if [ ! -f $MYVALUES_FILE ]; then
     echo "Custom Helm values yaml ($MYVALUES_FILE) not found"
@@ -36,7 +53,7 @@ function gcloud::check_installed(){
     if ! [ -x "$(command -v gcloud)" ]; then
         echo "Installing Google Cloud SDK"
 
-        if [ ${MACHINE_TYPE} == 'x86_64' ]; then
+        if [ ${MACHINE_ARCHITECTURE} == 'x86_64' ]; then
             curl https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-sdk-233.0.0-linux-x86_64.tar.gz | tar -xz
         else
             curl https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-sdk-233.0.0-linux-x86.tar.gz | tar -xz
