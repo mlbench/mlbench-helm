@@ -20,8 +20,8 @@ environment variables:
     CLUSTER_VERSION         Kubernetes version, default: 1.10
     DISK_TYPE               Cloud storage type, default: 'pd-standard'
     INSTANCE_DISK_SIZE      Google instance size (GB), default: 50
-    NUM_GPUS                Number of GPUs per instance, default:0
-    GPU_TYPE                The type of GPU to USE
+    NUM_GPUS                Number of GPUs per instance, 0 to not use GPU instances, default: 0
+    GPU_TYPE                The type of GPU to use, default: 'nvidia-tesla-p100'
 
     "
 
@@ -39,6 +39,7 @@ CLUSTER_VERSION=${CLUSTER_VERSION:-1.10}
 INSTANCE_DISK_SIZE=${INSTANCE_DISK_SIZE:-50}
 DISK_TYPE=${DISK_TYPE:-pd-standard}
 NUM_GPUS=${NUM_GPUS:-0}
+GPU_TYPE=${GPU_TYPE:-nvidia-tesla-p100}
 
 MACHINE_ARCHITECTURE=`uname -m`
 
@@ -110,15 +111,32 @@ case $1 in
     create-cluster)
         # Create a CPU cluster
         gcloud::check_installed
-        gcloud container clusters create ${CLUSTER_NAME} \
-            --zone=${MACHINE_ZONE} \
-            --cluster-version=${CLUSTER_VERSION} \
-            --enable-network-policy \
-            --machine-type=${MACHINE_TYPE} \
-            --num-nodes=${NUM_NODES} \
-            --disk-type=${DISK_TYPE} \
-            --disk-size=${INSTANCE_DISK_SIZE} \
-            --scopes=storage-full
+
+        if [ "$NUM_GPUS" -gt "0" ]; then
+            gcloud container clusters create ${CLUSTER_NAME} \
+                --zone=${MACHINE_ZONE} \
+                --cluster-version=${CLUSTER_VERSION} \
+                --enable-network-policy \
+                --machine-type=${MACHINE_TYPE} \
+                --accelerator type=${GPU_TYPE},count=${NUM_GPUS} \
+                --num-nodes=${NUM_NODES} \
+                --disk-type=${DISK_TYPE} \
+                --disk-size=${INSTANCE_DISK_SIZE} \
+                --scopes=storage-full
+
+            kubectl apply -f https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/stable/nvidia-driver-installer/cos/daemonset-preloaded.yaml
+        else
+            gcloud container clusters create ${CLUSTER_NAME} \
+                --zone=${MACHINE_ZONE} \
+                --cluster-version=${CLUSTER_VERSION} \
+                --enable-network-policy \
+                --machine-type=${MACHINE_TYPE} \
+                --num-nodes=${NUM_NODES} \
+                --disk-type=${DISK_TYPE} \
+                --disk-size=${INSTANCE_DISK_SIZE} \
+                --scopes=storage-full
+        fi
+
 
         # Get credential of the cluster
         gcloud container clusters get-credentials --zone ${MACHINE_ZONE} ${CLUSTER_NAME}
