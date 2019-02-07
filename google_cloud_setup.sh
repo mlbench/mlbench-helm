@@ -131,6 +131,8 @@ case $1 in
         export NODE_PORT=$(kubectl get --namespace default -o jsonpath="{.spec.ports[0].nodePort}" services ${RELEASE_NAME}-mlbench-master)
         export NODE_IP=$(gcloud compute instances list|grep $(kubectl get nodes --namespace default -o jsonpath="{.items[0].status.addresses[0].address}") |awk '{print $5}')
         gcloud compute firewall-rules create --quiet ${CLUSTER_NAME} --allow tcp:$NODE_PORT,tcp:$NODE_PORT
+        echo "You can access MLBench at the following URL:"
+        echo http://$NODE_IP:$NODE_PORT
         ;;
 
     upgrade-chart)
