@@ -1,29 +1,27 @@
 #!/bin/bash +x
-usage="usage: google_cloud_setup.sh <command> [NUM_NODES=<num_nodes>]
-                [PREFIX=<prefix>] [MACHINE_ZONE=<machine_zone>]
-                [MYVALUES_FILE=<myvalues_file>] [MACHINE_TYPE=<machine_type>]
-                [CLUSTER_VERSION=<cluster_version>] [DISK_TYPE=<disk_type>]
-                [INSTANCE_DISK_SIZE=<disk_size>]
+usage="usage: google_cloud_setup.sh <command>
 
 commands:
-    get-credential  Get google credentials
-    create-cluster  Create a new cluster
-    install-chart   Install the Helm chart
-    upgrade-chart   Upgrade (Redeploy) the Helm chart
-    uninstall-chart Delete the Helm release/chart
-    delete-cluster  Delete cluster and perform a cleanup
-    help            Show this help
+    get-credential          Get google credentials
+    create-cluster          Create a new cluster
+    install-chart           Install the Helm chart
+    upgrade-chart           Upgrade (Redeploy) the Helm chart
+    uninstall-chart         Delete the Helm release/chart
+    delete-cluster          Delete cluster and perform a cleanup
+    help                    Show this help
 
-parameters:
-    num_nodes       Number of nodes to create in the cluster, default: 2
-    prefix          Prefix to add to Cluster and Pod names, default: 'rel'
-    myvalues_file   Path to custom helm chart values file, default: 'myvalues.yaml'
+environment variables:
+    NUM_NODES               Number of nodes to create in the cluster, default: 2
+    PREFIX                  Prefix to add to Cluster and Pod names, default: 'rel'
+    MYVALUES_FILE           Path to custom helm chart values file, default: 'myvalues.yaml'
 
-    machine_zone    Google Cloud zone, default: 'europe-west1-b'
-    machine_type    Google Cloud instance type, default: 'n1-standard-4'
-    cluster_version Kubernetes version, default: 1.10
-    disk_type       Cloud storage type, default: 'pd-standard'
-    disk_size       Google cloud storage size (GB), default: 50
+    MACHINE_ZONE            Google Cloud zone, default: 'europe-west1-b'
+    MACHINE_TYPE            Google Cloud instance type, default: 'n1-standard-4'
+    CLUSTER_VERSION         Kubernetes version, default: 1.10
+    DISK_TYPE               Cloud storage type, default: 'pd-standard'
+    INSTANCE_DISK_SIZE      Google instance size (GB), default: 50
+    NUM_GPUS                Number of GPUs per instance, default:0
+    GPU_TYPE                The type of GPU to USE
 
     "
 
@@ -33,14 +31,14 @@ PREFIX=${PREFIX:-rel}
 RELEASE_NAME=${PREFIX}-${NUM_NODES}
 CLUSTER_NAME=${PREFIX}-${NUM_NODES}
 
-MACHINE_ZONE=europe-west1-b
-MYVALUES_FILE=myvalues.yaml
+MACHINE_ZONE=${MACHINE_ZONE:-europe-west1-b}
+MYVALUES_FILE=${MYVALUES_FILE:-myvalues.yaml}
 
-MACHINE_TYPE=n1-standard-4
-CLUSTER_VERSION=1.10
-INSTANCE_DISK_SIZE=50
-DISK_TYPE=pd-standard
-DISK_SIZE=10GB
+MACHINE_TYPE=${MACHINE_TYPE:-n1-standard-4}
+CLUSTER_VERSION=${CLUSTER_VERSION:-1.10}
+INSTANCE_DISK_SIZE=${INSTANCE_DISK_SIZE:-50}
+DISK_TYPE=${DISK_TYPE:-pd-standard}
+NUM_GPUS=${NUM_GPUS:-0}
 
 MACHINE_ARCHITECTURE=`uname -m`
 
