@@ -26,34 +26,38 @@ DISK_SIZE=10GB
 GCE_PERSISTENT_DISK=gce-nfs-disk
 
 MACHINE_TYPE=`uname -m`
-HELM_DIR=/usr/local/bin/helm
 
 if [ ! -f $MYVALUES_FILE ]; then
     echo "Custom Helm values yaml ($MYVALUES_FILE) not found"
     exit 1
 fi
 
-if ! [ -x "$(command -v gcloud)" ]; then
-    echo "Installing Google Cloud SDK"
+function gcloud::check_installed(){
+    if ! [ -x "$(command -v gcloud)" ]; then
+        echo "Installing Google Cloud SDK"
 
-    if [ ${MACHINE_TYPE} == 'x86_64' ]; then
-        curl https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-sdk-233.0.0-linux-x86_64.tar.gz | tar -xz
-    else
-        curl https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-sdk-233.0.0-linux-x86.tar.gz | tar -xz
+        if [ ${MACHINE_TYPE} == 'x86_64' ]; then
+            curl https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-sdk-233.0.0-linux-x86_64.tar.gz | tar -xz
+        else
+            curl https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-sdk-233.0.0-linux-x86.tar.gz | tar -xz
+        fi
+
+        ./google-cloud-sdk/install.sh
+        ./google-cloud-sdk/bin/gcloud init
     fi
+}
 
-    ./google-cloud-sdk/install.sh
-    ./google-cloud-sdk/bin/gcloud init
-fi
+function helm::check_installed(){
+    if ! [ -x "$(command -v helm)" ]; then
+        echo "Installing Helm"
 
-if ! [ -x "$(command -v helm)" ]; then
-    echo "Installing Helm"
-
-    # curl https://raw.githubusercontent.com/helm/helm/master/scripts/get | bash
-    source <(curl -s https://raw.githubusercontent.com/helm/helm/master/scripts/get)
-fi
+        # curl https://raw.githubusercontent.com/helm/helm/master/scripts/get | bash
+        source <(curl -s https://raw.githubusercontent.com/helm/helm/master/scripts/get)
+    fi
+}
 
 function gcloud::get_credential(){
+    gcloud::check_installed
     gcloud container clusters get-credentials --zone ${MACHINE_ZONE} ${CLUSTER_NAME}
 }
 
@@ -68,6 +72,8 @@ function kube::worker::ips(){
 }
 
 function chart::upgrade(){
+    helm::check_installed
+
     # Install helm chart
     helm upgrade --wait --recreate-pods -f ${MYVALUES_FILE} \
         --timeout 900 --install ${RELEASE_NAME} . \
@@ -80,6 +86,7 @@ function join_by(){
 }
 
 function gcloud::cleanup(){
+    gcloud::check_installed
     gcloud compute firewall-rules delete --quiet ${CLUSTER_NAME}
     gcloud container clusters delete --quiet --zone ${MACHINE_ZONE}  ${CLUSTER_NAME}
 }
@@ -87,6 +94,7 @@ function gcloud::cleanup(){
 case $1 in
     create-cluster)
         # Create a CPU cluster
+        gcloud::check_installed
         gcloud container clusters create ${CLUSTER_NAME} \
             --zone=${MACHINE_ZONE} \
             --cluster-version=${CLUSTER_VERSION} \
@@ -105,10 +113,12 @@ case $1 in
         kubectl create clusterrolebinding tiller --clusterrole cluster-admin --serviceaccount=kube-system:tiller
 
         # Initialize helm to install charts
+        helm::check_installed
         helm init --wait --service-account tiller
         ;;
 
     cleanup-cluster )
+        gcloud::check_installed
         gcloud compute firewall-rules delete --quiet ${CLUSTER_NAME}
         gcloud container clusters delete --quiet --zone ${MACHINE_ZONE}  ${CLUSTER_NAME}
         ;;
@@ -117,6 +127,7 @@ case $1 in
         chart::upgrade
 
         # setup firewall
+        gcloud::check_installed
         export NODE_PORT=$(kubectl get --namespace default -o jsonpath="{.spec.ports[0].nodePort}" services ${RELEASE_NAME}-mlbench-master)
         export NODE_IP=$(gcloud compute instances list|grep $(kubectl get nodes --namespace default -o jsonpath="{.items[0].status.addresses[0].address}") |awk '{print $5}')
         gcloud compute firewall-rules create --quiet ${CLUSTER_NAME} --allow tcp:$NODE_PORT,tcp:$NODE_PORT
@@ -128,6 +139,8 @@ case $1 in
 
 
     uninstall-chart)
+        gcloud::check_installed
+        helm::check_installed
         helm delete --purge ${RELEASE_NAME}
         gcloud compute firewall-rules delete --quiet ${CLUSTER_NAME}
         ;;
