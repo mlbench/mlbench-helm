@@ -112,7 +112,7 @@ case $1 in
         # Create a CPU cluster
         gcloud::check_installed
 
-        if [ "$NUM_GPUS" -gt "0" ]; then
+        if [ "$NUM_GPUS" -gt 0 ]; then
             gcloud container clusters create ${CLUSTER_NAME} \
                 --zone=${MACHINE_ZONE} \
                 --cluster-version=${CLUSTER_VERSION} \
