@@ -1,4 +1,4 @@
-#!/bin/bash +x
+#!/bin/bash +x -e
 usage="usage: google_cloud_setup.sh <command>
 
 commands:
