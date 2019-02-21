@@ -32,7 +32,7 @@ RELEASE_NAME=${PREFIX}-${NUM_NODES}
 CLUSTER_NAME=${PREFIX}-${NUM_NODES}
 
 MACHINE_ZONE=${MACHINE_ZONE:-europe-west1-b}
-MYVALUES_FILE=${MYVALUES_FILE:-myvalues.yaml}
+MYVALUES_FILE=${MYVALUES_FILE:-config.yaml}
 
 MACHINE_TYPE=${MACHINE_TYPE:-n1-standard-4}
 CLUSTER_VERSION=${CLUSTER_VERSION:-1.10}
@@ -93,7 +93,8 @@ function chart::upgrade(){
     # Install helm chart
     helm upgrade --wait --recreate-pods -f ${MYVALUES_FILE} \
         --timeout 900 --install ${RELEASE_NAME} . \
-        --set limits.workers=${NUM_NODES}
+        --set limits.workers=$((NUM_NODES-1)) \
+        --set limits.gpu=${NUM_GPUS}
 }
 
 function join_by(){
