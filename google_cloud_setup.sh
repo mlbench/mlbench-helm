@@ -1,4 +1,5 @@
-#!/bin/bash +x -e
+#!/bin/bash +x
+set -e
 usage="usage: google_cloud_setup.sh <command>
 
 commands:
@@ -35,7 +36,7 @@ MACHINE_ZONE=${MACHINE_ZONE:-europe-west1-b}
 MYVALUES_FILE=${MYVALUES_FILE:-config.yaml}
 
 MACHINE_TYPE=${MACHINE_TYPE:-n1-standard-4}
-CLUSTER_VERSION=${CLUSTER_VERSION:-1.10}
+CLUSTER_VERSION=${CLUSTER_VERSION:-1.11.7-gke.6}
 INSTANCE_DISK_SIZE=${INSTANCE_DISK_SIZE:-50}
 DISK_TYPE=${DISK_TYPE:-pd-standard}
 NUM_GPUS=${NUM_GPUS:-0}
