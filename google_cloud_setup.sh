@@ -21,6 +21,7 @@ environment variables:
     CLUSTER_VERSION         Kubernetes version, default: 1.10
     DISK_TYPE               Cloud storage type, default: 'pd-standard'
     INSTANCE_DISK_SIZE      Google instance size (GB), default: 50
+    NUM_CPUS                Number of CPUs per instance, default: 1
     NUM_GPUS                Number of GPUs per instance, 0 to not use GPU instances, default: 0
     GPU_TYPE                The type of GPU to use, default: 'nvidia-tesla-p100'
 
@@ -39,6 +40,7 @@ MACHINE_TYPE=${MACHINE_TYPE:-n1-standard-4}
 CLUSTER_VERSION=${CLUSTER_VERSION:-1.11.7-gke.6}
 INSTANCE_DISK_SIZE=${INSTANCE_DISK_SIZE:-50}
 DISK_TYPE=${DISK_TYPE:-pd-standard}
+NUM_CPUS=${NUM_CPUS:-1}
 NUM_GPUS=${NUM_GPUS:-0}
 GPU_TYPE=${GPU_TYPE:-nvidia-tesla-p100}
 
@@ -95,7 +97,8 @@ function chart::upgrade(){
     helm upgrade --wait --recreate-pods -f ${MYVALUES_FILE} \
         --timeout 900 --install ${RELEASE_NAME} . \
         --set limits.workers=$((NUM_NODES-1)) \
-        --set limits.gpu=${NUM_GPUS}
+        --set limits.gpu=${NUM_GPUS} \
+        --set limits.cpu=${NUM_CPUS}
 }
 
 function join_by(){
