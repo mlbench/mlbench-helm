@@ -1,3 +1,0 @@
-- make sure kubectl is installed
-- make sure kops installed
-- gossip based cluster must end with .k8s.local

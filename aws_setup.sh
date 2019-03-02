@@ -33,7 +33,7 @@ RELEASE_NAME=${PREFIX}-${NUM_NODES}
 CLUSTER_NAME=${PREFIX}-${NUM_NODES}
 DEV_NAME=${DEV_NAME:-/dev/sdh}
 
-MACHINE_ZONE=${MACHINE_ZONE:-europe-west1-b}
+MACHINE_ZONE=${MACHINE_ZONE:-us-east1-b}
 MYVALUES_FILE=${MYVALUES_FILE:-config.yaml}
 KEY_NAME=${KEY_NAME:-MyKey}
 SECURITY_GROUP=${SECURITY_GROUP:-EC2SecurityGroup}
@@ -84,25 +84,6 @@ function aws::check_installed(){
     # export env variables for kops to use
     export AWS_ACCESS_KEY_ID=$(aws configure get aws_access_key_id)
     export AWS_SECRET_ACCESS_KEY=$(aws configure get aws_secret_access_key)
-
-    # create store for state of cluster with an S3 bucket, ground truth for cluster config
-    # use us-east-1 otherwise more work is required
-    aws s3api create-bucket \
-        --bucket ${CLUSTER_NAME}-state-store \
-        --region us-east-1
-
-    # enable store versioning
-    aws s3api put-bucket-versioning --bucket ${CLUSTER_NAME}-state-store \ 
-        --versioning-configuration Status=Enabled
-
-    # use default bucket encryption
-    aws s3api put-bucket-encryption --bucket ${CLUSTER_NAME}-state-store \ 
-        --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
-
-    # using '.k8s.local' suffix for gossip-based cluster discovery 
-    export CLUSTER_NAME=${CLUSTER_NAME}.k8s.local
-    export KOPS_STATE_STORE=s3://${CLUSTER_NAME}-state-store
-
     fi
 }
 
@@ -157,30 +138,40 @@ case $1 in
         # Create a CPU cluster
         aws::check_installed
 
-        if [ "$NUM_GPUS" -gt 0 ]; then
+        # create store for state of cluster with an S3 bucket, ground truth for cluster config
+        # use us-east-1 otherwise more work is required
+        aws s3api create-bucket \
+            --bucket ${CLUSTER_NAME}-state-store \
+            --region us-east-1
 
-	        aws ec2 run-instances --image-id ${IMAGE_ID} \
-		    --key-name ${KEY_NAME} \
-		    --security-groups ${SECURITY_GROUP} \
-	        	--instance-type ${MACHINE_TYPE} \
-		    --placement AvailabilityZone=${MACHINE_ZONE} \
-	           	--block-device-mappings DeviceName=${DEV_NAME},Ebs={VolumeSize=${INSTANCE_DISK_SIZE}} \
-	           	--count ${NUM_NODES}
+        # enable store versioning
+        aws s3api put-bucket-versioning --bucket ${CLUSTER_NAME}-state-store \ 
+            --versioning-configuration Status=Enabled
 
-            kubectl apply -f https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/stable/nvidia-driver-installer/cos/daemonset-preloaded.yaml
-        else
-	        aws ec2 run-instances --image-id ${IMAGE_ID} \
-		    --key-name ${KEY_NAME} \
-		    --security-groups ${SECURITY_GROUP} \
-	        	--instance-type ${MACHINE_TYPE} \
-		    --placement AvailabilityZone=${MACHINE_ZONE} \
-	           	--block-device-mappings DeviceName=${DEV_NAME},Ebs={VolumeSize=${INSTANCE_DISK_SIZE}} \
-	           	--count ${NUM_NODES}
+        # use default bucket encryption
+        aws s3api put-bucket-encryption --bucket ${CLUSTER_NAME}-state-store \ 
+            --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
 
-        fi
+        export CLUSTER_NAME=${CLUSTER_NAME}.k8s.local
+        export KOPS_STATE_STORE=s3://${CLUSTER_NAME}-state-store
 
-        # Get credential of the cluster
-        gcloud container clusters get-credentials --zone ${MACHINE_ZONE} ${CLUSTER_NAME}
+        # may need aws ec2 describe-availability-zones --region us-west-2
+
+        # using '.k8s.local' suffix for gossip-based cluster discovery 
+        kops create cluster \
+            --cloud aws \
+            --zones ${MACHINE_ZONE} \
+            --name ${CLUSTER_NAME}.k8s.local \
+            --store s3://${CLUSTER_NAME}-state-store \
+            --master-size "${MACHINE_TYPE}" \
+            --node-size "${MACHINE_TYPE}" \
+            --node-count ${NUM_NODES} \
+            --image "ubuntu-os-cloud/ubuntu-1604-xenial-v20170202" \
+            --yes
+
+        #if [ "$NUM_GPUS" -gt 0 ]; then
+        #    kubectl apply -f https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/stable/nvidia-driver-installer/cos/daemonset-preloaded.yaml
+        #fi
 
         kubectl --namespace kube-system create sa tiller
 
