@@ -27,7 +27,6 @@ environment variables:
 
     "
 
-
 NUM_NODES=${NUM_NODES:-2}
 PREFIX=${PREFIX:-rel}
 RELEASE_NAME=${PREFIX}-${NUM_NODES}
@@ -61,18 +60,49 @@ function aws::check_installed(){
     if ! [ -x "$(command -v aws)" ]; then
         echo "Installing AWS CLI"
 
+    # download and install aws cli
 	curl "https://s3.amazonaws.com/aws-cli/awscli-bundle.zip" -o "awscli-bundle.zip"
 	unzip awscli-bundle.zip
 	./awscli-bundle/install -b ~/bin/aws
-	aws configure
 
-	aws ec2 create-key-pair --key-name MyKeyPair --query 'KeyMaterial' --output text > MyKeyPair.pem
-	chmod 400 MyKeyPair.pem
-	aws ec2 create-security-group --group-name my-sg --description "My security group"
+    # generate access credentials
+    aws iam create-group --group-name kops
+    aws iam attach-group-policy --policy-arn arn:aws:iam::aws:policy/AmazonEC2FullAccess --group-name kops
 
-	aws ec2 create-security-group --group-name EC2SecurityGroup --description "Security Group for EC2 instances to allow port 22"
-	aws ec2 authorize-security-group-ingress --group-name EC2SecurityGroup --protocol tcp --port 22 --cidr 0.0.0.0/0
-	aws ec2 describe-security-groups --group-names EC2SecurityGroup
+    aws iam attach-group-policy --policy-arn arn:aws:iam::aws:policy/AmazonRoute53FullAccess --group-name kops
+    aws iam attach-group-policy --policy-arn arn:aws:iam::aws:policy/AmazonS3FullAccess --group-name kops
+    aws iam attach-group-policy --policy-arn arn:aws:iam::aws:policy/IAMFullAccess --group-name kops
+    aws iam attach-group-policy --policy-arn arn:aws:iam::aws:policy/AmazonVPCFullAccess --group-name kops
+    
+    aws iam create-user --user-name kops
+    aws iam add-user-to-group --user-name kops --group-name kops
+    aws iam create-access-key --user-name kops
+
+    # configure access credentials, may require use input
+    aws configure
+
+    # export env variables for kops to use
+    export AWS_ACCESS_KEY_ID=$(aws configure get aws_access_key_id)
+    export AWS_SECRET_ACCESS_KEY=$(aws configure get aws_secret_access_key)
+
+    # create store for state of cluster with an S3 bucket, ground truth for cluster config
+    # use us-east-1 otherwise more work is required
+    aws s3api create-bucket \
+        --bucket ${CLUSTER_NAME}-state-store \
+        --region us-east-1
+
+    # enable store versioning
+    aws s3api put-bucket-versioning --bucket ${CLUSTER_NAME}-state-store \ 
+        --versioning-configuration Status=Enabled
+
+    # use default bucket encryption
+    aws s3api put-bucket-encryption --bucket ${CLUSTER_NAME}-state-store \ 
+        --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
+
+    # using '.k8s.local' suffix for gossip-based cluster discovery 
+    export CLUSTER_NAME=${CLUSTER_NAME}.k8s.local
+    export KOPS_STATE_STORE=s3://${CLUSTER_NAME}-state-store
+
     fi
 }
 
@@ -129,23 +159,23 @@ case $1 in
 
         if [ "$NUM_GPUS" -gt 0 ]; then
 
-	    aws ec2 run-instances --image-id ${IMAGE_ID} \
-		--key-name ${KEY_NAME} \
-		--security-groups ${SECURITY_GROUP} \
-	    	--instance-type ${MACHINE_TYPE} \
-		--placement AvailabilityZone=${MACHINE_ZONE} \
-	       	--block-device-mappings DeviceName=${DEV_NAME},Ebs={VolumeSize=${INSTANCE_DISK_SIZE}} \
-	       	--count ${NUM_NODES}
+	        aws ec2 run-instances --image-id ${IMAGE_ID} \
+		    --key-name ${KEY_NAME} \
+		    --security-groups ${SECURITY_GROUP} \
+	        	--instance-type ${MACHINE_TYPE} \
+		    --placement AvailabilityZone=${MACHINE_ZONE} \
+	           	--block-device-mappings DeviceName=${DEV_NAME},Ebs={VolumeSize=${INSTANCE_DISK_SIZE}} \
+	           	--count ${NUM_NODES}
 
             kubectl apply -f https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/stable/nvidia-driver-installer/cos/daemonset-preloaded.yaml
         else
-	    aws ec2 run-instances --image-id ${IMAGE_ID} \
-		--key-name ${KEY_NAME} \
-		--security-groups ${SECURITY_GROUP} \
-	    	--instance-type ${MACHINE_TYPE} \
-		--placement AvailabilityZone=${MACHINE_ZONE} \
-	       	--block-device-mappings DeviceName=${DEV_NAME},Ebs={VolumeSize=${INSTANCE_DISK_SIZE}} \
-	       	--count ${NUM_NODES}
+	        aws ec2 run-instances --image-id ${IMAGE_ID} \
+		    --key-name ${KEY_NAME} \
+		    --security-groups ${SECURITY_GROUP} \
+	        	--instance-type ${MACHINE_TYPE} \
+		    --placement AvailabilityZone=${MACHINE_ZONE} \
+	           	--block-device-mappings DeviceName=${DEV_NAME},Ebs={VolumeSize=${INSTANCE_DISK_SIZE}} \
+	           	--count ${NUM_NODES}
 
         fi
 
