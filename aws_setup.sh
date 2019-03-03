@@ -3,7 +3,7 @@ set -e
 usage="usage: google_cloud_setup.sh <command>
 
 commands:
-    get-credential          Get google credentials
+    get-credential          Get aws credentials
     create-cluster          Create a new cluster
     install-chart           Install the Helm chart
     upgrade-chart           Upgrade (Redeploy) the Helm chart
@@ -30,10 +30,10 @@ environment variables:
 NUM_NODES=${NUM_NODES:-2}
 PREFIX=${PREFIX:-rel}
 RELEASE_NAME=${PREFIX}-${NUM_NODES}
-CLUSTER_NAME=${PREFIX}-${NUM_NODES}
+CLUSTER_NAME=${PREFIX}-${NUM_NODES}b
 DEV_NAME=${DEV_NAME:-/dev/sdh}
 
-MACHINE_ZONE=${MACHINE_ZONE:-us-east1-b}
+MACHINE_ZONE=${MACHINE_ZONE:-us-east-1b}
 MYVALUES_FILE=${MYVALUES_FILE:-config.yaml}
 KEY_NAME=${KEY_NAME:-MyKey}
 SECURITY_GROUP=${SECURITY_GROUP:-EC2SecurityGroup}
@@ -57,7 +57,7 @@ if [ ! -f $MYVALUES_FILE ]; then
 fi
 
 function kubectl::check_installed(){
-    if ! [-x "$(command -v kubectl)"]; then
+    if ! [ -x "$(command -v kubectl)" ]; then
         echo "Installing kubectl"
         curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
         chmod +x ./kubectl
@@ -70,30 +70,32 @@ function aws::check_installed(){
     if ! [ -x "$(command -v aws)" ]; then
         echo "Installing AWS CLI"
 
-    # download and install aws cli
+    	# download and install aws cli
 	curl "https://s3.amazonaws.com/aws-cli/awscli-bundle.zip" -o "awscli-bundle.zip"
 	unzip awscli-bundle.zip
-	./awscli-bundle/install -b ~/bin/aws
+	./awscli-bundle/install -b ~/.local/bin/aws
+	echo "export PATH=\$PATH:\$HOME/.local/bin" >> $HOME/.bashrc
+	source $HOME/.bashrc
 
-    # generate access credentials
-    aws iam create-group --group-name kops
-    aws iam attach-group-policy --policy-arn arn:aws:iam::aws:policy/AmazonEC2FullAccess --group-name kops
+    	# configure access credentials, may require use input
+    	aws configure
 
-    aws iam attach-group-policy --policy-arn arn:aws:iam::aws:policy/AmazonRoute53FullAccess --group-name kops
-    aws iam attach-group-policy --policy-arn arn:aws:iam::aws:policy/AmazonS3FullAccess --group-name kops
-    aws iam attach-group-policy --policy-arn arn:aws:iam::aws:policy/IAMFullAccess --group-name kops
-    aws iam attach-group-policy --policy-arn arn:aws:iam::aws:policy/AmazonVPCFullAccess --group-name kops
-    
-    aws iam create-user --user-name kops
-    aws iam add-user-to-group --user-name kops --group-name kops
-    aws iam create-access-key --user-name kops
+    	# generate access credentials
+    	aws iam create-group --group-name kops
+    	aws iam attach-group-policy --policy-arn arn:aws:iam::aws:policy/AmazonEC2FullAccess --group-name kops
 
-    # configure access credentials, may require use input
-    aws configure
+    	aws iam attach-group-policy --policy-arn arn:aws:iam::aws:policy/AmazonRoute53FullAccess --group-name kops
+    	aws iam attach-group-policy --policy-arn arn:aws:iam::aws:policy/AmazonS3FullAccess --group-name kops
+    	aws iam attach-group-policy --policy-arn arn:aws:iam::aws:policy/IAMFullAccess --group-name kops
+    	aws iam attach-group-policy --policy-arn arn:aws:iam::aws:policy/AmazonVPCFullAccess --group-name kops
+    	
+    	aws iam create-user --user-name kops
+    	aws iam add-user-to-group --user-name kops --group-name kops
+    	aws iam create-access-key --user-name kops
 
-    # export env variables for kops to use
-    export AWS_ACCESS_KEY_ID=$(aws configure get aws_access_key_id)
-    export AWS_SECRET_ACCESS_KEY=$(aws configure get aws_secret_access_key)
+    	# export env variables for kops to use
+    	export AWS_ACCESS_KEY_ID=$(aws configure get aws_access_key_id)
+    	export AWS_SECRET_ACCESS_KEY=$(aws configure get aws_secret_access_key)
     fi
 }
 
@@ -117,8 +119,6 @@ function kops::check_installed(){
 function aws::get_credential(){
     aws::check_installed
     kubectl::check_installed
-    cat ~/.kube/config
-    cat ~/.aws/credentials
 }
 
 function kube::worker::hostnames(){
@@ -165,28 +165,37 @@ case $1 in
             --region us-east-1
 
         # enable store versioning
-        aws s3api put-bucket-versioning --bucket ${CLUSTER_NAME}-state-store \ 
+        aws s3api put-bucket-versioning --bucket "${CLUSTER_NAME}-state-store" \
             --versioning-configuration Status=Enabled
 
         # use default bucket encryption
-        aws s3api put-bucket-encryption --bucket ${CLUSTER_NAME}-state-store \ 
+        aws s3api put-bucket-encryption --bucket "${CLUSTER_NAME}-state-store" \
             --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
 
-        export CLUSTER_NAME=${CLUSTER_NAME}.k8s.local
         export KOPS_STATE_STORE=s3://${CLUSTER_NAME}-state-store
+        export CLUSTER_NAME=${CLUSTER_NAME}.k8s.local
 
         # may need aws ec2 describe-availability-zones --region us-west-2
+	kops::check_installed
+
+	if [ ! -d ~/.ssh ]; then
+	    ssh-keygen
+	fi
 
         # using '.k8s.local' suffix for gossip-based cluster discovery 
+	echo $KOPS_STATE_STORE
+
+	#kops create secret --name $CLUSTER_NAME --state $KOPS_STATE_STORE sshpublickey admin -i ~/.ssh/id_rsa.pub
+
         kops create cluster \
             --cloud aws \
             --zones ${MACHINE_ZONE} \
-            --name ${CLUSTER_NAME}.k8s.local \
-            --store s3://${CLUSTER_NAME}-state-store \
+            --name "${CLUSTER_NAME}" \
+            --state ${KOPS_STATE_STORE} \
             --master-size "${MACHINE_TYPE}" \
             --node-size "${MACHINE_TYPE}" \
             --node-count ${NUM_NODES} \
-            --image "ubuntu-os-cloud/ubuntu-1604-xenial-v20170202" \
+            --image "099720109477/ubuntu/images/hvm-ssd/ubuntu-xenial-16.04-amd64-server-20181114" \
             --yes
 
         #if [ "$NUM_GPUS" -gt 0 ]; then
