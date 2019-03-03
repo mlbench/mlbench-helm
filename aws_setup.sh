@@ -56,6 +56,16 @@ if [ ! -f $MYVALUES_FILE ]; then
     exit 1
 fi
 
+function kubectl::check_installed(){
+    if ! [-x "$(command -v kubectl)"]; then
+        echo "Installing kubectl"
+        curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
+        chmod +x ./kubectl
+        #should use sudo? what if no admin priviledges? easier to install with 'sudo snap install kubectl --classic'
+        sudo mv ./kubectl /usr/local/bin/kubectl
+    fi
+}
+
 function aws::check_installed(){
     if ! [ -x "$(command -v aws)" ]; then
         echo "Installing AWS CLI"
@@ -96,9 +106,19 @@ function helm::check_installed(){
     fi
 }
 
+function kops::check_installed(){
+    if ! [ -x "$(command -v kops)" ]; then
+        curl -Lo kops https://github.com/kubernetes/kops/releases/download/$(curl -s https://api.github.com/repos/kubernetes/kops/releases/latest | grep tag_name | cut -d '"' -f 4)/kops-linux-amd64
+        chmod +x ./kops
+        sudo mv ./kops /usr/local/bin/
+    fi
+}
+
 function aws::get_credential(){
     aws::check_installed
-    gcloud container clusters get-credentials --zone ${MACHINE_ZONE} ${CLUSTER_NAME}
+    kubectl::check_installed
+    cat ~/.kube/config
+    cat ~/.aws/credentials
 }
 
 function kube::worker::hostnames(){
@@ -127,7 +147,7 @@ function join_by(){
     shift; echo "$*";
 }
 
-function gcloud::cleanup(){
+function aws::cleanup(){
     aws::check_installed
     gcloud compute firewall-rules delete --quiet ${CLUSTER_NAME}
     gcloud container clusters delete --quiet --zone ${MACHINE_ZONE}  ${CLUSTER_NAME}
@@ -183,19 +203,19 @@ case $1 in
         ;;
 
     cleanup-cluster )
-        gcloud::check_installed
-        gcloud compute firewall-rules delete --quiet ${CLUSTER_NAME}
-        gcloud container clusters delete --quiet --zone ${MACHINE_ZONE}  ${CLUSTER_NAME}
+        aws::check_installed
+        #gcloud compute firewall-rules delete --quiet ${CLUSTER_NAME}
+        kops delete cluster --name=${MACHINE_ZONE} --state=s3://${CLUSTER_NAME}-state-store
         ;;
 
     install-chart)
         chart::upgrade
 
         # setup firewall
-        gcloud::check_installed
+        aws::check_installed
         export NODE_PORT=$(kubectl get --namespace default -o jsonpath="{.spec.ports[0].nodePort}" services ${RELEASE_NAME}-mlbench-master)
-        export NODE_IP=$(gcloud compute instances list|grep $(kubectl get nodes --namespace default -o jsonpath="{.items[0].status.addresses[0].address}") |awk '{print $5}')
-        gcloud compute firewall-rules create --quiet ${CLUSTER_NAME} --allow tcp:$NODE_PORT,tcp:$NODE_PORT
+        #export NODE_IP=$(gcloud compute instances list|grep $(kubectl get nodes --namespace default -o jsonpath="{.items[0].status.addresses[0].address}") |awk '{print $5}')
+        #gcloud compute firewall-rules create --quiet ${CLUSTER_NAME} --allow tcp:$NODE_PORT,tcp:$NODE_PORT
         echo "You can access MLBench at the following URL:"
         echo http://$NODE_IP:$NODE_PORT
         ;;
@@ -206,18 +226,18 @@ case $1 in
 
 
     uninstall-chart)
-        gcloud::check_installed
+        aws::check_installed
         helm::check_installed
         helm delete --purge ${RELEASE_NAME}
-        gcloud compute firewall-rules delete --quiet ${CLUSTER_NAME}
+        #gcloud compute firewall-rules delete --quiet ${CLUSTER_NAME}
         ;;
 
     delete-cluster)
-        gcloud::cleanup
+        aws::cleanup
         ;;
 
     get-credential)
-        gcloud::get_credential
+        aws::get_credential
         ;;
     help)
         echo "$usage"
