@@ -46,6 +46,8 @@ GPU_TYPE=${GPU_TYPE:-nvidia-tesla-p100}
 
 MACHINE_ARCHITECTURE=`uname -m`
 
+firewallCheck=`gcloud compute firewall-rules list --filter="name=(${CLUSTER_NAME})"`
+
 if [ ! -f $MYVALUES_FILE ]; then
     echo "Custom Helm values yaml ($MYVALUES_FILE) not found"
     exit 1
@@ -108,7 +110,12 @@ function join_by(){
 
 function gcloud::cleanup(){
     gcloud::check_installed
-    gcloud compute firewall-rules delete --quiet ${CLUSTER_NAME}
+    if test -z "$firewallCheck"; then
+        echo "firewall rule already deleted"
+    else
+        gcloud compute firewall-rules delete --quiet ${CLUSTER_NAME}
+        echo "firewall rule deleted"
+    fi
     gcloud container clusters delete --quiet --zone ${MACHINE_ZONE}  ${CLUSTER_NAME}
 }
 
@@ -157,7 +164,12 @@ case $1 in
 
     cleanup-cluster )
         gcloud::check_installed
-        gcloud compute firewall-rules delete --quiet ${CLUSTER_NAME}
+        if test -z "$firewallCheck"; then
+            echo "firewall rule already deleted"
+        else
+            gcloud compute firewall-rules delete --quiet ${CLUSTER_NAME}
+            echo "firewall rule deleted"
+        fi
         gcloud container clusters delete --quiet --zone ${MACHINE_ZONE}  ${CLUSTER_NAME}
         ;;
 
