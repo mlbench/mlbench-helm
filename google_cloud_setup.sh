@@ -18,13 +18,13 @@ environment variables:
 
     MACHINE_ZONE            Google Cloud zone, default: 'europe-west1-b'
     MACHINE_TYPE            Google Cloud instance type, default: 'n1-standard-4'
-    CLUSTER_VERSION         Kubernetes version, default: 1.10
+    CLUSTER_VERSION         Kubernetes version, default: 1.11
     DISK_TYPE               Cloud storage type, default: 'pd-standard'
     INSTANCE_DISK_SIZE      Google instance size (GB), default: 50
     NUM_CPUS                Number of CPUs per instance, default: 1
     NUM_GPUS                Number of GPUs per instance, 0 to not use GPU instances, default: 0
     GPU_TYPE                The type of GPU to use, default: 'nvidia-tesla-p100'
-
+    PREEMPTIBLE              Whether to use preemptible instances, default: 0
     "
 
 
@@ -37,14 +37,17 @@ MACHINE_ZONE=${MACHINE_ZONE:-europe-west1-b}
 MYVALUES_FILE=${MYVALUES_FILE:-config.yaml}
 
 MACHINE_TYPE=${MACHINE_TYPE:-n1-standard-4}
-CLUSTER_VERSION=${CLUSTER_VERSION:-1.11.7-gke.6}
+CLUSTER_VERSION=${CLUSTER_VERSION:-1.11}
 INSTANCE_DISK_SIZE=${INSTANCE_DISK_SIZE:-50}
 DISK_TYPE=${DISK_TYPE:-pd-standard}
 NUM_CPUS=${NUM_CPUS:-1}
 NUM_GPUS=${NUM_GPUS:-0}
 GPU_TYPE=${GPU_TYPE:-nvidia-tesla-p100}
+PREEMPTIBLE=${PREEMPTIBLE:-0}
 
 MACHINE_ARCHITECTURE=`uname -m`
+
+firewallCheck=`gcloud compute firewall-rules list --filter="name=(${CLUSTER_NAME})"`
 
 if [ ! -f $MYVALUES_FILE ]; then
     echo "Custom Helm values yaml ($MYVALUES_FILE) not found"
@@ -108,7 +111,12 @@ function join_by(){
 
 function gcloud::cleanup(){
     gcloud::check_installed
-    gcloud compute firewall-rules delete --quiet ${CLUSTER_NAME}
+    if test -z "$firewallCheck"; then
+        echo "firewall rule already deleted"
+    else
+        gcloud compute firewall-rules delete --quiet ${CLUSTER_NAME}
+        echo "firewall rule deleted"
+    fi
     gcloud container clusters delete --quiet --zone ${MACHINE_ZONE}  ${CLUSTER_NAME}
 }
 
@@ -116,6 +124,10 @@ case $1 in
     create-cluster)
         # Create a CPU cluster
         gcloud::check_installed
+
+        if [ "$PREEMPTIBLE" -gt 0 ]; then
+            preemptible=1;
+        fi
 
         if [ "$NUM_GPUS" -gt 0 ]; then
             gcloud container clusters create ${CLUSTER_NAME} \
@@ -127,7 +139,8 @@ case $1 in
                 --num-nodes=${NUM_NODES} \
                 --disk-type=${DISK_TYPE} \
                 --disk-size=${INSTANCE_DISK_SIZE} \
-                --scopes=storage-full
+                --scopes=storage-full \
+                ${preemptible:+--preemptible}
 
             kubectl apply -f https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/stable/nvidia-driver-installer/cos/daemonset-preloaded.yaml
         else
@@ -139,7 +152,8 @@ case $1 in
                 --num-nodes=${NUM_NODES} \
                 --disk-type=${DISK_TYPE} \
                 --disk-size=${INSTANCE_DISK_SIZE} \
-                --scopes=storage-full
+                --scopes=storage-full\
+                ${preemptible:+--preemptible}
         fi
 
 
@@ -157,7 +171,12 @@ case $1 in
 
     cleanup-cluster )
         gcloud::check_installed
-        gcloud compute firewall-rules delete --quiet ${CLUSTER_NAME}
+        if test -z "$firewallCheck"; then
+            echo "firewall rule already deleted"
+        else
+            gcloud compute firewall-rules delete --quiet ${CLUSTER_NAME}
+            echo "firewall rule deleted"
+        fi
         gcloud container clusters delete --quiet --zone ${MACHINE_ZONE}  ${CLUSTER_NAME}
         ;;
 
@@ -167,7 +186,13 @@ case $1 in
         # setup firewall
         gcloud::check_installed
         export NODE_PORT=$(kubectl get --namespace default -o jsonpath="{.spec.ports[0].nodePort}" services ${RELEASE_NAME}-mlbench-master)
-        export NODE_IP=$(gcloud compute instances list|grep $(kubectl get nodes --namespace default -o jsonpath="{.items[0].status.addresses[0].address}") |awk '{print $5}')
+
+        if [ "$PREEMPTIBLE" -gt 0 ]; then
+            export NODE_IP=$(gcloud compute instances list|grep $(kubectl get nodes --namespace default -o jsonpath="{.items[0].status.addresses[0].address}") |awk '{print $6}')
+        else
+            export NODE_IP=$(gcloud compute instances list|grep $(kubectl get nodes --namespace default -o jsonpath="{.items[0].status.addresses[0].address}") |awk '{print $5}')
+        fi
+
         gcloud compute firewall-rules create --quiet ${CLUSTER_NAME} --allow tcp:$NODE_PORT,tcp:$NODE_PORT
         echo "You can access MLBench at the following URL:"
         echo http://$NODE_IP:$NODE_PORT
