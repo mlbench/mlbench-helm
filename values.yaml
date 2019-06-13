@@ -12,7 +12,7 @@ master:
 
   image:
     repository: mlbench/mlbench_master
-    tag: 1.1.1
+    tag: latest
     pullPolicy: Always
 
   service:
@@ -27,7 +27,7 @@ worker:
 
   image:
     repository: mlbench/mlbench_worker
-    tag: 1.1.0
+    tag: latest
     pullPolicy: Always
 
   service:
@@ -71,7 +71,6 @@ worker:
 limits:
   workers: 128
   cpu:
-  bandwidth:
   gpu:
 
 gcePersistentDisk:
