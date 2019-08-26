@@ -1,6 +1,6 @@
 #!/bin/bash +x
 set -e
-usage="usage: google_cloud_setup.sh <command>
+usage="usage: aws_setup.sh <command>
 
 commands:
     get-credential          Get aws credentials
@@ -17,7 +17,7 @@ environment variables:
     MYVALUES_FILE           Path to custom helm chart values file, default: 'myvalues.yaml'
 
     MACHINE_ZONE            Google Cloud zone, default: 'europe-west1-b'
-    MACHINE_TYPE            Google Cloud instance type, default: 'n1-standard-4'
+    MACHINE_TYPE            Google Cloud instance type, default: 't2.medium'
     CLUSTER_VERSION         Kubernetes version, default: 1.10
     DISK_TYPE               Cloud storage type, default: 'pd-standard'
     INSTANCE_DISK_SIZE      Google instance size (GB), default: 50
@@ -39,7 +39,7 @@ KEY_NAME=${KEY_NAME:-MyKey}
 SECURITY_GROUP=${SECURITY_GROUP:-EC2SecurityGroup}
 
 IMAGE_ID=${IMAGE_ID:-ami-075b44448d2276521}
-MACHINE_TYPE=${MACHINE_TYPE:-t2.micro}
+MACHINE_TYPE=${MACHINE_TYPE:-t2.medium}
 CLUSTER_VERSION=${CLUSTER_VERSION:-1.11.7-gke.6}
 INSTANCE_DISK_SIZE=${INSTANCE_DISK_SIZE:-50}
 DISK_TYPE=${DISK_TYPE:-pd-standard}
@@ -75,27 +75,32 @@ function aws::check_installed(){
 	unzip awscli-bundle.zip
 	./awscli-bundle/install -b ~/.local/bin/aws
 	echo "export PATH=\$PATH:\$HOME/.local/bin" >> $HOME/.bashrc
+    export PATH=$PATH:$HOME/.local/bin
 	source $HOME/.bashrc
 
-    	# configure access credentials, may require use input
-    	aws configure
+    # configure access credentials, may require use input
+    aws configure
 
-    	# generate access credentials
-    	aws iam create-group --group-name kops
-    	aws iam attach-group-policy --policy-arn arn:aws:iam::aws:policy/AmazonEC2FullAccess --group-name kops
+    # generate access credentials
+    aws iam create-group --group-name kops
+    aws iam attach-group-policy --policy-arn arn:aws:iam::aws:policy/AmazonEC2FullAccess --group-name kops
 
-    	aws iam attach-group-policy --policy-arn arn:aws:iam::aws:policy/AmazonRoute53FullAccess --group-name kops
-    	aws iam attach-group-policy --policy-arn arn:aws:iam::aws:policy/AmazonS3FullAccess --group-name kops
-    	aws iam attach-group-policy --policy-arn arn:aws:iam::aws:policy/IAMFullAccess --group-name kops
-    	aws iam attach-group-policy --policy-arn arn:aws:iam::aws:policy/AmazonVPCFullAccess --group-name kops
-    	
-    	aws iam create-user --user-name kops
-    	aws iam add-user-to-group --user-name kops --group-name kops
-    	aws iam create-access-key --user-name kops
+    aws iam attach-group-policy --policy-arn arn:aws:iam::aws:policy/AmazonRoute53FullAccess --group-name kops
+    aws iam attach-group-policy --policy-arn arn:aws:iam::aws:policy/AmazonS3FullAccess --group-name kops
+    aws iam attach-group-policy --policy-arn arn:aws:iam::aws:policy/IAMFullAccess --group-name kops
+    aws iam attach-group-policy --policy-arn arn:aws:iam::aws:policy/AmazonVPCFullAccess --group-name kops
 
-    	# export env variables for kops to use
-    	export AWS_ACCESS_KEY_ID=$(aws configure get aws_access_key_id)
-    	export AWS_SECRET_ACCESS_KEY=$(aws configure get aws_secret_access_key)
+    aws iam create-user --user-name kops
+    aws iam add-user-to-group --user-name kops --group-name kops
+    aws iam create-access-key --user-name kops
+
+    # export env variables for kops to use
+    export AWS_ACCESS_KEY_ID=$(aws configure get aws_access_key_id)
+    export AWS_SECRET_ACCESS_KEY=$(aws configure get aws_secret_access_key)
+
+    # cleanup installation package
+    rm -r ./awscli-bundle/
+    rm ./awscli-bundle.zip
     fi
 }
 
@@ -149,8 +154,10 @@ function join_by(){
 
 function aws::cleanup(){
     aws::check_installed
-    gcloud compute firewall-rules delete --quiet ${CLUSTER_NAME}
-    gcloud container clusters delete --quiet --zone ${MACHINE_ZONE}  ${CLUSTER_NAME}
+    kops::check_installed
+    export KOPS_STATE_STORE=s3://${CLUSTER_NAME}-state-store
+    export CLUSTER_NAME=${CLUSTER_NAME}.k8s.local
+    kops delete cluster --state ${KOPS_STATE_STORE} --name "${CLUSTER_NAME}" --yes
 }
 
 case $1 in
@@ -176,16 +183,16 @@ case $1 in
         export CLUSTER_NAME=${CLUSTER_NAME}.k8s.local
 
         # may need aws ec2 describe-availability-zones --region us-west-2
-	kops::check_installed
+        kops::check_installed
 
-	if [ ! -d ~/.ssh ]; then
-	    ssh-keygen
-	fi
+        if [ ! -d ~/.ssh ]; then
+            ssh-keygen
+        fi
 
-        # using '.k8s.local' suffix for gossip-based cluster discovery 
-	echo $KOPS_STATE_STORE
+            # using '.k8s.local' suffix for gossip-based cluster discovery
+        echo $KOPS_STATE_STORE
 
-	#kops create secret --name $CLUSTER_NAME --state $KOPS_STATE_STORE sshpublickey admin -i ~/.ssh/id_rsa.pub
+        #kops create secret --name $CLUSTER_NAME --state $KOPS_STATE_STORE sshpublickey admin -i ~/.ssh/id_rsa.pub
 
         kops create cluster \
             --cloud aws \
@@ -197,6 +204,10 @@ case $1 in
             --node-count ${NUM_NODES} \
             --image "099720109477/ubuntu/images/hvm-ssd/ubuntu-xenial-16.04-amd64-server-20181114" \
             --yes
+
+        while [ 1 ]; do
+            kops validate cluster --name "${CLUSTER_NAME}" && break || sleep 5
+        done;
 
         #if [ "$NUM_GPUS" -gt 0 ]; then
         #    kubectl apply -f https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/stable/nvidia-driver-installer/cos/daemonset-preloaded.yaml
@@ -213,7 +224,6 @@ case $1 in
 
     cleanup-cluster )
         aws::check_installed
-        #gcloud compute firewall-rules delete --quiet ${CLUSTER_NAME}
         kops delete cluster --name=${MACHINE_ZONE} --state=s3://${CLUSTER_NAME}-state-store
         ;;
 
@@ -223,8 +233,16 @@ case $1 in
         # setup firewall
         aws::check_installed
         export NODE_PORT=$(kubectl get --namespace default -o jsonpath="{.spec.ports[0].nodePort}" services ${RELEASE_NAME}-mlbench-master)
-        #export NODE_IP=$(gcloud compute instances list|grep $(kubectl get nodes --namespace default -o jsonpath="{.items[0].status.addresses[0].address}") |awk '{print $5}')
-        #gcloud compute firewall-rules create --quiet ${CLUSTER_NAME} --allow tcp:$NODE_PORT,tcp:$NODE_PORT
+        export NODE_IP=$(kubectl get nodes --namespace default -o jsonpath="{.items[0].status.addresses[0].address}")
+        export MAIN_MACHINE_ZONE=$(echo $MACHINE_ZONE | sed -e 's/\([a-z]\)*$//g')
+        export GROUP_ID=$(aws ec2 describe-instances --region ${MAIN_MACHINE_ZONE} --filter Name=private-ip-address,Values=${NODE_IP} --query 'Reservations[].Instances[].[SecurityGroups][0][0][0].GroupId')
+        export GROUP_ID=${GROUP_ID:1:-1}
+        export NODE_IP=$(aws ec2 describe-instances --region ${MAIN_MACHINE_ZONE} --filter Name=private-ip-address,Values=${NODE_IP} --query 'Reservations[].Instances[].[InstanceId,PublicIpAddress][0][1]')
+        export NODE_IP=${NODE_IP:1:-1}
+        #export VPC_ID=$(aws ec2 describe-instances --region ${MAIN_MACHINE_ZONE} --filter Name=private-ip-address,Values=${NODE_IP} --query 'Reservations[].Instances[].[VpcId][0][0]')
+        #export VPC_ID=${VPC_ID:1:-1}
+        aws ec2 authorize-security-group-ingress --region ${MAIN_MACHINE_ZONE} --group-id ${GROUP_ID} --protocol tcp --port ${NODE_PORT} --cidr 0.0.0.0/0
+
         echo "You can access MLBench at the following URL:"
         echo http://$NODE_IP:$NODE_PORT
         ;;
@@ -237,8 +255,12 @@ case $1 in
     uninstall-chart)
         aws::check_installed
         helm::check_installed
+        export MAIN_MACHINE_ZONE=$(echo $MACHINE_ZONE | sed -e 's/\([a-z]\)*$//g')
+        export NODE_PORT=$(kubectl get --namespace default -o jsonpath="{.spec.ports[0].nodePort}" services ${RELEASE_NAME}-mlbench-master)
+        export GROUP_ID=$(aws ec2 describe-instances --region ${MAIN_MACHINE_ZONE} --filter Name=private-ip-address,Values=${NODE_IP} --query 'Reservations[].Instances[].[SecurityGroups][0][0][0].GroupId')
+        export GROUP_ID=${GROUP_ID:1:-1}
+        aws ec2 rauthorize-security-group-ingress--region ${MAIN_MACHINE_ZONE} --group-id ${GROUP_ID} --protocol tcp --port ${NODE_PORT} --cidr 0.0.0.0/0
         helm delete --purge ${RELEASE_NAME}
-        #gcloud compute firewall-rules delete --quiet ${CLUSTER_NAME}
         ;;
 
     delete-cluster)
