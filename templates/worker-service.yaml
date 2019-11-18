@@ -1,13 +1,14 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Release.Name }}
+  name: {{ template "mlbench.worker.fullname" . }}
   labels:
     app: {{ template "mlbench.name" . }}
     chart: {{ template "mlbench.chart" . }}
     component: "{{ .Values.worker.name }}"
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
+    set: default-set
 spec:
   selector:
     app: {{ template "mlbench.name" . }}

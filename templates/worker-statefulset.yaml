@@ -8,12 +8,14 @@ metadata:
     component: "{{ .Values.worker.name }}"
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
+    set: default-set
 spec:
   replicas: 0
   selector:
     matchLabels:
       app: {{ template "mlbench.name" . }}
       release: {{ .Release.Name }}
+      set: default-set
   serviceName: {{ .Release.Name }}
   podManagementPolicy: Parallel
   updateStrategy:
@@ -29,8 +31,8 @@ spec:
     spec:
       serviceAccountName: {{ template "mlbench.worker.fullname" . }}-sa
       affinity:
-        podAntiAffinity: 
-          requiredDuringSchedulingIgnoredDuringExecution: 
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
           - labelSelector:
               matchExpressions:
               - key: component
