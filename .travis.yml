@@ -40,7 +40,7 @@ script:
   --set worker.image.tag=latest \
   --set limits.cpu=1000m \
   --set limits.workers=1 \
-  --set worker.replicaCount=1 \
+  --set worker.replicaCount=0 \
   --set limits.gpu=0 \
   --name travis-test \
   ./ | kubectl apply --v=5 --validate --dry-run -f -
