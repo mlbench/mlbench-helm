@@ -34,8 +34,6 @@ worker:
     type: ClusterIP
     port: 22
 
-  replicaCount: 1
-
   sshKey:
     id_rsa: |
       -----BEGIN RSA PRIVATE KEY-----
