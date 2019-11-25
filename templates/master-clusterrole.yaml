@@ -13,5 +13,5 @@ rules:
   resources: ["pods", "pods/exec"]
   verbs: ["get", "list", "create"]
 - apiGroups: ["apps"]
-  resources: ["statefulsets", "statefulsets.apps", "statefulsets/status", "statefulsets.apps/status"]
+  resources: ["statefulsets", "statefulsets.apps", "statefulsets/status", "statefulsets.apps/status", "services"]
   verbs: ["get", "list", "watch", "update", "patch", "create", "delete"]
