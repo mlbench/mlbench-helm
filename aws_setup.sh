@@ -27,19 +27,20 @@ environment variables:
 
     "
 
-NUM_NODES=${NUM_NODES:-2}
+NUM_NODES=${NUM_NODES:-3}
 PREFIX=${PREFIX:-rel}
 RELEASE_NAME=${PREFIX}-${NUM_NODES}
 CLUSTER_NAME=${PREFIX}-${NUM_NODES}b
 DEV_NAME=${DEV_NAME:-/dev/sdh}
 
 MACHINE_ZONE=${MACHINE_ZONE:-us-east-1b}
-MYVALUES_FILE=${MYVALUES_FILE:-config.yaml}
+MYVALUES_FILE=${MYVALUES_FILE:-values.yaml}
 KEY_NAME=${KEY_NAME:-MyKey}
 SECURITY_GROUP=${SECURITY_GROUP:-EC2SecurityGroup}
 
 IMAGE_ID=${IMAGE_ID:-ami-075b44448d2276521}
 MACHINE_TYPE=${MACHINE_TYPE:-t2.medium}
+KUBERNETES_VERSION=${KUBERNETES_VERSION:-1.15}
 CLUSTER_VERSION=${CLUSTER_VERSION:-1.11.7-gke.6}
 INSTANCE_DISK_SIZE=${INSTANCE_DISK_SIZE:-50}
 DISK_TYPE=${DISK_TYPE:-pd-standard}
@@ -104,6 +105,17 @@ function aws::check_installed(){
     fi
 }
 
+function eksctl::check_installed(){
+    if ! [ -x "$(command -v eksctl)" ]; then
+        echo "Installing eksctl"
+
+    	# download and install eksctl
+	curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
+	sudo mv /tmp/eksctl /usr/local/bin
+    fi
+}
+
+
 function helm::check_installed(){
     if ! [ -x "$(command -v helm)" ]; then
         echo "Installing Helm"
@@ -141,7 +153,7 @@ function chart::upgrade(){
 
     # Install helm chart
     helm upgrade --wait --recreate-pods -f ${MYVALUES_FILE} \
-        --timeout 900 --install ${RELEASE_NAME} . \
+        --timeout 900s --install ${RELEASE_NAME} . \
         --set limits.workers=$((NUM_NODES-1)) \
         --set limits.gpu=${NUM_GPUS} \
         --set limits.cpu=${NUM_CPUS}
@@ -154,77 +166,41 @@ function join_by(){
 
 function aws::cleanup(){
     aws::check_installed
-    kops::check_installed
-    export KOPS_STATE_STORE=s3://${CLUSTER_NAME}-state-store
-    export CLUSTER_NAME=${CLUSTER_NAME}.k8s.local
-    kops delete cluster --state ${KOPS_STATE_STORE} --name "${CLUSTER_NAME}" --yes
+    eksctl::check_installed
+    eksctl delete cluster --name prod
 }
 
 case $1 in
     create-cluster)
         # Create a CPU cluster
         aws::check_installed
-
-        # create store for state of cluster with an S3 bucket, ground truth for cluster config
-        # use us-east-1 otherwise more work is required
-        aws s3api create-bucket \
-            --bucket ${CLUSTER_NAME}-state-store \
-            --region us-east-1
-
-        # enable store versioning
-        aws s3api put-bucket-versioning --bucket "${CLUSTER_NAME}-state-store" \
-            --versioning-configuration Status=Enabled
-
-        # use default bucket encryption
-        aws s3api put-bucket-encryption --bucket "${CLUSTER_NAME}-state-store" \
-            --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
-
-        export KOPS_STATE_STORE=s3://${CLUSTER_NAME}-state-store
-        export CLUSTER_NAME=${CLUSTER_NAME}.k8s.local
-
-        # may need aws ec2 describe-availability-zones --region us-west-2
-        kops::check_installed
+	eksctl::check_installed
 
         if [ ! -d ~/.ssh ]; then
             ssh-keygen
         fi
 
-            # using '.k8s.local' suffix for gossip-based cluster discovery
-        echo $KOPS_STATE_STORE
-
-        #kops create secret --name $CLUSTER_NAME --state $KOPS_STATE_STORE sshpublickey admin -i ~/.ssh/id_rsa.pub
-
-        kops create cluster \
-            --cloud aws \
-            --zones ${MACHINE_ZONE} \
-            --name "${CLUSTER_NAME}" \
-            --state ${KOPS_STATE_STORE} \
-            --master-size "${MACHINE_TYPE}" \
-            --node-size "${MACHINE_TYPE}" \
-            --node-count ${NUM_NODES} \
-            --image "099720109477/ubuntu/images/hvm-ssd/ubuntu-xenial-16.04-amd64-server-20181114" \
-            --yes
-
-        while [ 1 ]; do
-            kops validate cluster --name "${CLUSTER_NAME}" && break || sleep 5
-        done;
+        eksctl create cluster \
+		--name "${CLUSTER_NAME}" \
+		--version ${KUBERNETES_VERSION} \
+		--region ${MACHINE_ZONE} \
+		--nodegroup-name standard-workers \
+		--node-type "${MACHINE_TYPE}" \
+		--nodes ${NUM_NODES} \
+		--nodes-min $((NUM_NODES-1)) \
+		--nodes-max $((NUM_NODES+1)) \
+		--ssh-access \
+		--managed
 
         #if [ "$NUM_GPUS" -gt 0 ]; then
         #    kubectl apply -f https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/stable/nvidia-driver-installer/cos/daemonset-preloaded.yaml
         #fi
-
-        kubectl --namespace kube-system create sa tiller
-
-        kubectl create clusterrolebinding tiller --clusterrole cluster-admin --serviceaccount=kube-system:tiller
-
-        # Initialize helm to install charts
-        helm::check_installed
-        helm init --wait --service-account tiller
         ;;
 
     cleanup-cluster )
         aws::check_installed
-        kops delete cluster --name=${MACHINE_ZONE} --state=s3://${CLUSTER_NAME}-state-store
+	eksctl::check_installed
+        eksctl delete cluster --name "${CLUSTER_NAME}"
         ;;
 
     install-chart)
@@ -237,7 +213,7 @@ case $1 in
         export MAIN_MACHINE_ZONE=$(echo $MACHINE_ZONE | sed -e 's/\([a-z]\)*$//g')
         export GROUP_ID=$(aws ec2 describe-instances --region ${MAIN_MACHINE_ZONE} --filter Name=private-ip-address,Values=${NODE_IP} --query 'Reservations[].Instances[].[SecurityGroups][0][0][0].GroupId')
         export GROUP_ID=${GROUP_ID:1:-1}
-        export NODE_IP=$(aws ec2 describe-instances --region ${MAIN_MACHINE_ZONE} --filter Name=private-ip-address,Values=${NODE_IP} --query 'Reservations[].Instances[].[InstanceId,PublicIpAddress][0][1]')
+        export NODE_IP=$(	aws ec2 describe-instances --region ${MAIN_MACHINE_ZONE} --filter Name=private-ip-address,Values=${NODE_IP} --query 'Reservations[].Instances[].[InstanceId,PublicIpAddress][0][1]')
         export NODE_IP=${NODE_IP:1:-1}
         #export VPC_ID=$(aws ec2 describe-instances --region ${MAIN_MACHINE_ZONE} --filter Name=private-ip-address,Values=${NODE_IP} --query 'Reservations[].Instances[].[VpcId][0][0]')
         #export VPC_ID=${VPC_ID:1:-1}
