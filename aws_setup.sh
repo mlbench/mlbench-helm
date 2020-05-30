@@ -125,14 +125,6 @@ function helm::check_installed(){
     fi
 }
 
-function kops::check_installed(){
-    if ! [ -x "$(command -v kops)" ]; then
-        curl -Lo kops https://github.com/kubernetes/kops/releases/download/$(curl -s https://api.github.com/repos/kubernetes/kops/releases/latest | grep tag_name | cut -d '"' -f 4)/kops-linux-amd64
-        chmod +x ./kops
-        sudo mv ./kops /usr/local/bin/
-    fi
-}
-
 function aws::get_credential(){
     aws::check_installed
     kubectl::check_installed
