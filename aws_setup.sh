@@ -205,7 +205,7 @@ case $1 in
         export MAIN_MACHINE_ZONE=$(echo $MACHINE_ZONE | sed -e 's/\([a-z]\)*$//g')
         export GROUP_ID=$(aws ec2 describe-instances --region ${MAIN_MACHINE_ZONE} --filter Name=private-ip-address,Values=${NODE_IP} --query 'Reservations[].Instances[].[SecurityGroups][0][0][0].GroupId')
         export GROUP_ID=${GROUP_ID:1:-1}
-        export NODE_IP=$(	aws ec2 describe-instances --region ${MAIN_MACHINE_ZONE} --filter Name=private-ip-address,Values=${NODE_IP} --query 'Reservations[].Instances[].[InstanceId,PublicIpAddress][0][1]')
+        export NODE_IP=$(aws ec2 describe-instances --region ${MAIN_MACHINE_ZONE} --filter Name=private-ip-address,Values=${NODE_IP} --query 'Reservations[].Instances[].[InstanceId,PublicIpAddress][0][1]')
         export NODE_IP=${NODE_IP:1:-1}
         #export VPC_ID=$(aws ec2 describe-instances --region ${MAIN_MACHINE_ZONE} --filter Name=private-ip-address,Values=${NODE_IP} --query 'Reservations[].Instances[].[VpcId][0][0]')
         #export VPC_ID=${VPC_ID:1:-1}
