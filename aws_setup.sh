@@ -159,7 +159,7 @@ function join_by(){
 function aws::cleanup(){
     aws::check_installed
     eksctl::check_installed
-    eksctl delete cluster --name prod
+    eksctl delete cluster --name "${CLUSTER_NAME}"
 }
 
 case $1 in
