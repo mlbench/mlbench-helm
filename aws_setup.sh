@@ -33,7 +33,7 @@ RELEASE_NAME=${PREFIX}-${NUM_NODES}
 CLUSTER_NAME=${PREFIX}-${NUM_NODES}b
 DEV_NAME=${DEV_NAME:-/dev/sdh}
 
-MACHINE_ZONE=${MACHINE_ZONE:-us-east-1b}
+MACHINE_ZONE=${MACHINE_ZONE:-us-east-1}
 MYVALUES_FILE=${MYVALUES_FILE:-values.yaml}
 KEY_NAME=${KEY_NAME:-MyKey}
 SECURITY_GROUP=${SECURITY_GROUP:-EC2SecurityGroup}
@@ -184,9 +184,10 @@ case $1 in
 		--ssh-access \
 		--managed
 
-        #if [ "$NUM_GPUS" -gt 0 ]; then
-        #    kubectl apply -f https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/stable/nvidia-driver-installer/cos/daemonset-preloaded.yaml
-        #fi
+        if [ "$NUM_GPUS" -gt 0 ]; then
+		echo "Installing NVIDIA drivers"
+		kubectl create -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/1.0.0-beta6/nvidia-device-plugin.yml
+        fi
         ;;
 
     cleanup-cluster )
@@ -223,12 +224,7 @@ case $1 in
     uninstall-chart)
         aws::check_installed
         helm::check_installed
-        export MAIN_MACHINE_ZONE=$(echo $MACHINE_ZONE | sed -e 's/\([a-z]\)*$//g')
-        export NODE_PORT=$(kubectl get --namespace default -o jsonpath="{.spec.ports[0].nodePort}" services ${RELEASE_NAME}-mlbench-master)
-        export GROUP_ID=$(aws ec2 describe-instances --region ${MAIN_MACHINE_ZONE} --filter Name=private-ip-address,Values=${NODE_IP} --query 'Reservations[].Instances[].[SecurityGroups][0][0][0].GroupId')
-        export GROUP_ID=${GROUP_ID:1:-1}
-        aws ec2 rauthorize-security-group-ingress--region ${MAIN_MACHINE_ZONE} --group-id ${GROUP_ID} --protocol tcp --port ${NODE_PORT} --cidr 0.0.0.0/0
-        helm delete --purge ${RELEASE_NAME}
+        helm uninstall ${RELEASE_NAME}
         ;;
 
     delete-cluster)
