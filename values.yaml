@@ -21,18 +21,6 @@ master:
 
 
 worker:
-  enabled: true
-
-  name: worker
-
-  image:
-    repository: mlbench/mlbench_worker
-    tag: latest
-    pullPolicy: Always
-
-  service:
-    type: ClusterIP
-    port: 22
 
   sshKey:
     id_rsa: |
