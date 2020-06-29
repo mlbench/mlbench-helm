@@ -36,8 +36,6 @@ script:
   helm template  \
   --set master.image.repository=mlbench/mlbench-master \
   --set master.image.tag=latest \
-  --set worker.image.repository=mlbench/mlbench-worker \
-  --set worker.image.tag=latest \
   --set limits.cpu=1000m \
   --set limits.workers=1 \
   --set worker.replicaCount=0 \
