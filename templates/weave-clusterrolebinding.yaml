@@ -13,7 +13,6 @@ metadata:
     "email-address": "support@weave.works"
     }
   labels:
-  name: weave-net
 roleRef:
   kind: ClusterRole
   name: weave-net

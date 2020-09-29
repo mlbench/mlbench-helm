@@ -13,7 +13,6 @@ metadata:
     "email-address": "support@weave.works"
     }
   labels:
-  name: weave-net
   namespace: kube-system
 roleRef:
   kind: Role
