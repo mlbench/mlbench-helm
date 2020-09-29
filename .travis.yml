@@ -50,6 +50,7 @@ before_script:
 
 script:
   - kubectl cluster-info
+  - kubectl version
   - helm template travis-test-2 . --set limits.cpu=1000m --set limits.workers=1 --set limits.gpu=0 | kubectl apply --validate -f -
   - sleep 2
   - ./wait_until_pods_ready.sh 30 2
