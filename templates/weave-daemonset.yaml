@@ -1,5 +1,5 @@
 {{ if .Values.weave.enabled }}
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: weave-net
@@ -17,6 +17,9 @@ metadata:
   namespace: kube-system
 spec:
   minReadySeconds: 5
+  selector:
+    matchLabels:
+      name: weave-net
   template:
     metadata:
       labels:

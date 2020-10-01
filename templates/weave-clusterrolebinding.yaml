@@ -1,5 +1,5 @@
 {{ if .Values.weave.enabled }}
-apiVersion: rbac.authorization.k8s.io/v1beta1
+apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: weave-net
@@ -13,7 +13,6 @@ metadata:
     "email-address": "support@weave.works"
     }
   labels:
-  name: weave-net
 roleRef:
   kind: ClusterRole
   name: weave-net
